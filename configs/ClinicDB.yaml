@@ -1,0 +1,24 @@
+DATASET:
+  NAME: "ClinicDB"
+  TRAIN_PATH: "./data/ClinicDB/Train_Folder/"
+  VAL_PATH: "./data/ClinicDB/Val_Folder/"
+  TEST_PATH: "./data/ClinicDB/Test_Folder/"
+  TEXT_PROMPT_PATH: "./data/ClinicDB/Prompts_Folder/"
+  SIZE: 224
+  
+TEST:
+  USE_LATEST: True
+
+MODEL:
+  NAME: MedSR
+  PROMPT_TOKENS: 1
+  DINO_LAYERS: [9, 10, 11]
+  MASK_THRESHOLD: 0.5
+  MASK_COLLAPSE_THRESHOLD: 0.75
+  DINO_NAME: "dinov2_vitb14_reg"
+  BACKBONE: "ViT-B/16"
+  ADAPTER_DIM: 256
+  NUM_UPSCALE: 2
+  LAYERS: [1,2,3,4,5,6,7,8,9,10]
+  TEMPERATURE: 0.2
+  DEVICE: "cuda"
