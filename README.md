@@ -145,7 +145,7 @@ Each split folder contains `img/` and `label/`. Prompt spreadsheets contain `Ima
 python train.py --config-file configs/BUSI.yaml --output-dir outputs/medsr/ALL_multi_run/BUS/run_1 --seed 666
 
 # Evaluate the released BUSI checkpoint on BUSI
-python test.py --config-file configs/BUSI.yaml --output-dir outputs/medsr/ALL_multi_run/BUS/run_1 --source_dataset BUSI --seed 666
+python test.py --config-file configs/BUSI.yaml --output-dir outputs/medsr/ALL_multi_run/BUS/run_1 --source_dataset BUSI --seed 666 --checkpoint PATH_to_Checkpoint 
 python utils/eval.py --config-file configs/BUSI.yaml --output-dir outputs/medsr/ALL_multi_run/BUS/run_1 --seed 666
 ```
 
