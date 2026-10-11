@@ -66,6 +66,13 @@ def get_arguments():
         type=str,
         default="", 
         help="output directory")
+
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        default=None,
+        help="Explicit MedSR checkpoint path; overrides the default path and TEST.USE_LATEST.",
+    )
     
     parser.add_argument(
             "opts",
@@ -122,14 +129,23 @@ def main():
     backbone_name = cfg.MODEL.BACKBONE.replace("/", "-")
     results_name = f"MedSR_{backbone_name}"
 
-    checkpoint_type = "latest" if cfg.TEST.USE_LATEST else "best_dice"
-    checkpoint_path = os.path.join(
-        cfg.output_dir,
-        cfg.source_dataset if cfg.data_percentage == 100 else cfg.DATASET.NAME,
-        "trained_models",
-        f"seed{cfg.seed}",
-        f"{results_name}_{checkpoint_type}.pth"
-    )
+    if cfg.checkpoint is not None:
+        checkpoint_path = os.path.abspath(os.path.expanduser(cfg.checkpoint))
+        checkpoint_selection = "explicit --checkpoint"
+    else:
+        checkpoint_type = "latest" if cfg.TEST.USE_LATEST else "best_dice"
+        checkpoint_path = os.path.join(
+            cfg.output_dir,
+            cfg.source_dataset if cfg.data_percentage == 100 else cfg.DATASET.NAME,
+            "trained_models",
+            f"seed{cfg.seed}",
+            f"{results_name}_{checkpoint_type}.pth"
+        )
+        checkpoint_selection = f"default {checkpoint_type}"
+
+    if not os.path.isfile(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint not found ({checkpoint_selection}): {checkpoint_path}")
+    logger.info(f"Loading checkpoint ({checkpoint_selection}): {checkpoint_path}")
 
     model = build_medsr(cfg)
 
