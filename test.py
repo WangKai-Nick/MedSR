@@ -7,7 +7,6 @@ import torch
 import argparse
 import logging
 import random
-import time
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -105,9 +104,6 @@ def logger_config(log_path):
     return logger
 
 
-def synchronize_if_needed(device):
-    if "cuda" in str(device).lower():
-        torch.cuda.synchronize(device)
 
 def main():
     cfg = get_arguments()
@@ -162,42 +158,16 @@ def main():
                                         test_text, test_tf, image_size=cfg.DATASET.SIZE)
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    total_inference_time = 0.0
-    pla_time = 0.0
-    pla_per_image_time = 0.0
-    sar_time = 0.0
-    sar_per_image_time = 0.0
-    timed_batches = 0
-    timed_images = 0
-    warmup_batches = min(10, max(len(test_dataloader) - 1, 0))
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(test_dataloader)):
             images = batch["image"].to(cfg.MODEL.DEVICE)
-            count_timing = batch_idx >= warmup_batches
-
-            synchronize_if_needed(cfg.MODEL.DEVICE)
-            total_start_time = time.time()
 
             seg_logits = torch.sigmoid(model(image=images, text=batch["text_prompt"]))
             if seg_logits.ndim != 3:
                 raise RuntimeError(f"Expected MedSR output shape [B,H,W], got {tuple(seg_logits.shape)}.")
             mask_preds = seg_logits > 0.5
 
-            synchronize_if_needed(cfg.MODEL.DEVICE)
-            elapsed_time = time.time() - total_start_time
-
-            if count_timing:
-                total_inference_time += elapsed_time
-            if count_timing and hasattr(model, "last_inference_timing") and model.last_inference_timing:
-                pla_time += model.last_inference_timing.get("pixel_level_adaptation", 0.0)
-                pla_per_image_time += model.last_inference_timing.get("pixel_level_adaptation_per_image", 0.0)
-                sar_time += model.last_inference_timing.get("structure_aware_refinement", 0.0)
-                sar_per_image_time += model.last_inference_timing.get("structure_aware_refinement_per_image", 0.0)
-
-            if count_timing:
-                timed_batches += 1
-                timed_images += images.shape[0]
 
             dataset_names = batch["dataset_name"]   # list of strings
             mask_names = batch["mask_name"]         # list of strings
@@ -221,43 +191,6 @@ def main():
                 os.makedirs(save_dir, exist_ok=True)
                 cv2.imwrite(os.path.join(save_dir, mask_name), binary_pred * 255)
 
-    if timed_batches > 0:
-        avg_runtime_per_batch = total_inference_time / timed_batches
-        total_images = timed_images
-        fps = total_images / total_inference_time if total_inference_time > 0 else 0.0
-        time_per_image = total_inference_time / total_images if total_images > 0 else 0.0
-
-        logger.info(f"Warmup batches skipped for timing: {warmup_batches}")
-        logger.info(f"Average Total inference time: {avg_runtime_per_batch:.6f} s/batch")
-        logger.info(f"Runtime (s/batch): {avg_runtime_per_batch:.6f}")
-        logger.info(f"FPS: {fps:.6f}")
-        logger.info(f"Time per image (s/image): {time_per_image:.6f}")
-        logger.info(f"Average PLA time: {pla_time / timed_batches:.6f} s/batch")
-        logger.info(f"Average PLA time per image: {pla_per_image_time / timed_batches:.6f} s/image")
-        logger.info(f"Average SAR time: {sar_time / timed_batches:.6f} s/batch")
-        logger.info(f"Average SAR time per image: {sar_per_image_time / timed_batches:.6f} s/image")
-
-        timing_summary_path = os.path.join(results_root, "timing_summary.txt")
-        with open(timing_summary_path, "w", encoding="utf-8") as f:
-            f.write("=== Timing Summary ===\n")
-            f.write(f"config_file: {cfg.config_file}\n")
-            f.write(f"source_dataset: {cfg.source_dataset}\n")
-            f.write(f"dataset_name: {cfg.DATASET.NAME}\n")
-            f.write(f"model: {cfg.MODEL.NAME}\n")
-            f.write(f"backbone: {cfg.MODEL.BACKBONE}\n")
-            f.write(f"batch_size: {test_dataloader.batch_size}\n")
-            f.write(f"warmup_batches_skipped: {warmup_batches}\n")
-            f.write(f"timed_batches: {timed_batches}\n")
-            f.write(f"timed_images: {total_images}\n")
-            f.write(f"total_dataset_images: {len(test_dataset)}\n")
-            f.write(f"checkpoint: {checkpoint_path}\n")
-            f.write(f"Runtime (s/batch): {avg_runtime_per_batch:.6f}\n")
-            f.write(f"FPS: {fps:.6f}\n")
-            f.write(f"Time per image (s/image): {time_per_image:.6f}\n")
-            f.write(f"Average PLA time (s/batch): {pla_time / timed_batches:.6f}\n")
-            f.write(f"Average PLA time per image (s/image): {pla_per_image_time / timed_batches:.6f}\n")
-            f.write(f"Average SAR time (s/batch): {sar_time / timed_batches:.6f}\n")
-            f.write(f"Average SAR time per image (s/image): {sar_per_image_time / timed_batches:.6f}\n")
 
 if __name__ == "__main__":
     main()

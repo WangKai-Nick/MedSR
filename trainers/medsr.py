@@ -1,4 +1,3 @@
-import time
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import torch
@@ -151,12 +150,7 @@ class MedSR(nn.Module):
             feat_dim=self.text_proj_dim,
             num_scales=num_dino_scales,
         )
-        self.last_inference_timing = {}
 
-    @staticmethod
-    def _sync_if_needed(device):
-        if device.type == "cuda":
-            torch.cuda.synchronize(device)
 
     def build_prompt_embeddings(self, tokenized_prompts: torch.Tensor):
         pad_token_id = self.text_model.config.pad_token_id
@@ -291,14 +285,10 @@ class MedSR(nn.Module):
 
     def forward(self, image, text):
         batch_size, _, height, width = image.shape
-        self.last_inference_timing = {}
 
         tokenized_prompts = self.tokenizer(text).to(self.device)
         prompts, attention_mask = self.build_prompt_embeddings(tokenized_prompts)
 
-        if not self.training:
-            self._sync_if_needed(image.device)
-            pla_start_time = time.time()
 
         image_features, text_features = self.encode_text_image(tokenized_prompts, prompts, image, attention_mask)
 
@@ -307,10 +297,6 @@ class MedSR(nn.Module):
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
         text_query = self.mask_head(text_features).unsqueeze(1)
 
-        if not self.training:
-            self._sync_if_needed(image.device)
-            pla_time = time.time() - pla_start_time
-            sar_start_time = time.time()
 
         dino_out = self.dino_backbone(image)
         refined_lowres_logits, _ = self.semantic_structural_fusion(
@@ -328,14 +314,6 @@ class MedSR(nn.Module):
 
         if not self.training:
             selected_logits = self.adaptive_mask_selection(semantic_logits, refined_logits)
-            self._sync_if_needed(image.device)
-            sar_time = time.time() - sar_start_time
-            self.last_inference_timing = {
-                "pixel_level_adaptation": pla_time,
-                "pixel_level_adaptation_per_image": pla_time / max(batch_size, 1),
-                "structure_aware_refinement": sar_time,
-                "structure_aware_refinement_per_image": sar_time / max(batch_size, 1),
-            }
             return selected_logits
 
         if self.training:
